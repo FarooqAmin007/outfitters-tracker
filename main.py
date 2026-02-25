@@ -1,183 +1,117 @@
 import requests
 import time
-import json
 import random
+import json
 
-print("===== GOD MODE QUANTUM v3 STEALTH STARTED =====")
+print("===== GOD MODE AI HUNTER QUANTUM v4 STARTED =====")
 
-BASE_URL = "https://outfitters.com.pk"
+# ---------- SETTINGS ----------
 
-STATE_FILE = "quantum_state.json"
+MAX_PRODUCTS = 500
+DELAY = 1.5
+LOW_LOG_MODE = True
 
-CHECK_INTERVAL = 180
+SHOPIFY_SITES = [
+    "https://gymshark.com",
+    "https://allbirds.com",
+    "https://ridge.com",
+    "https://mvmt.com",
+    "https://colourpop.com"
+]
 
-PUSH_TOKEN = "o.LMvhCtQSfJMHLEXu1ghkK7NOxYpwHlyc"
+# ---------- SAFE PRICE PARSER ----------
 
-HEADERS = {
-"User-Agent":"Mozilla/5.0"
-}
-
-
-# PUSHBULLET
-def push(title,message):
-
+def parse_price(value):
     try:
-
-        requests.post(
-        "https://api.pushbullet.com/v2/pushes",
-        json={
-        "type":"note",
-        "title":title,
-        "body":message
-        },
-        headers={
-        "Access-Token":PUSH_TOKEN
-        }
-        )
-
-        print("Push Sent:",title)
-
-    except Exception as e:
-
-        print("Push Error:",e)
-
-
-
-# LOAD STATE
-def load_state():
-
-    try:
-        with open(STATE_FILE) as f:
-            return json.load(f)
+        return float(str(value).replace(",", "").replace("$",""))
     except:
-        return {}
+        return 0.0
 
 
+# ---------- GET PRODUCTS ----------
 
-# SAVE STATE
-def save_state(s):
-
-    with open(STATE_FILE,"w") as f:
-        json.dump(s,f)
-
-
-
-# DISCOUNT
-def discount(old,new):
-
-    if old==0:
-        return 0
-
-    return int((old-new)/old*100)
-
-
-
-# SCAN PRODUCTS
-def scan_products():
-
-    url=f"{BASE_URL}/products.json?limit=250"
-
-    r=requests.get(url,headers=HEADERS,timeout=30)
-
-    return r.json()["products"]
-
-
-
-# QUANTUM ENGINE
-def quantum():
-
-    state=load_state()
-
-    new_state={}
-
-    products=scan_products()
-
-    total_products=0
-    price_changes=0
-    sales_found=0
-
-
-    for p in products:
-
-        name=p["title"]
-
-        handle=p["handle"]
-
-        link=f"{BASE_URL}/products/{handle}"
-
-
-        for v in p["variants"]:
-
-            key=handle+"-"+v["title"]
-
-            price=int(float(v["price"]))
-
-            new_state[key]=price
-
-            old=state.get(key)
-
-            total_products+=1
-
-
-            if old is None:
-                continue
-
-
-            if price!=old:
-
-                price_changes+=1
-
-                d=discount(old,price)
-
-                push(
-                "💰 Price Change",
-                f"{name}\n{old} → {price}\n{link}"
-                )
-
-
-                if d>=30:
-
-                    sales_found+=1
-
-                    push(
-                    "🔥 Sale Alert",
-                    f"{name}\n{d}% OFF\n{price}\n{link}"
-                    )
-
-
-                if d>=70:
-
-                    push(
-                    "⚠️ MEGA SALE",
-                    f"{name}\n{old} → {price}\n{link}"
-                    )
-
-
-    save_state(new_state)
-
-
-    print("Products scanned:",total_products)
-    print("Price changes:",price_changes)
-    print("Sales found:",sales_found)
-
-
-
-# LOOP
-while True:
+def get_products(site):
 
     try:
 
-        quantum()
+        url = site + "/products.json?limit=250"
 
-        sleep=random.randint(150,210)
+        r = requests.get(url, timeout=15)
 
-        print("Sleeping:",sleep)
+        data = r.json()
 
-        time.sleep(sleep)
+        products = data.get("products", [])
 
+        return products
 
     except Exception as e:
 
-        print("Error:",e)
+        if not LOW_LOG_MODE:
+            print("Error:", site, e)
 
-        time.sleep(60)
+        return []
+
+
+# ---------- SCANNER ----------
+
+def scan_site(site):
+
+    products = get_products(site)
+
+    print(f"Scanning {site}")
+
+    print("Products found:", len(products))
+
+    for p in products[:MAX_PRODUCTS]:
+
+        try:
+
+            title = p["title"]
+
+            variant = p["variants"][0]
+
+            price = parse_price(variant["price"])
+
+            compare = parse_price(variant.get("compare_at_price"))
+
+            discount = 0
+
+            if compare > 0:
+
+                discount = round((compare-price)/compare*100,1)
+
+            if discount > 40:
+
+                print("🔥 DEAL FOUND")
+
+                print(title)
+
+                print("Price:", price)
+
+                print("Was:", compare)
+
+                print("Discount:", discount,"%")
+
+                print("------")
+
+        except:
+            pass
+
+
+# ---------- MAIN LOOP ----------
+
+def main():
+
+    total = 0
+
+    for site in SHOPIFY_SITES:
+
+        scan_site(site)
+
+        total += 1
+
+        time.sleep(DELAY)
+
+    print("Scan Complete")
+
+main()
