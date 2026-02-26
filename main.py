@@ -1,117 +1,163 @@
 import requests
-import time
-import random
 import json
+import os
 
-print("===== GOD MODE AI HUNTER QUANTUM v4 STARTED =====")
+print("===== GOD MODE AI HUNTER QUANTUM v6 ULTRA STARTED =====")
 
-# ---------- SETTINGS ----------
+# =============================
+# SETTINGS
+# =============================
 
-MAX_PRODUCTS = 500
-DELAY = 1.5
-LOW_LOG_MODE = True
+SITE = "https://outfitters.com.pk"
+API = SITE + "/products.json?limit=250"
 
-SHOPIFY_SITES = [
-    "https://gymshark.com",
-    "https://allbirds.com",
-    "https://ridge.com",
-    "https://mvmt.com",
-    "https://colourpop.com"
-]
+PUSH_TOKEN = "o.LMvhCtQSfJMHLEXu1ghkK7NOxYpwHlyc"
 
-# ---------- SAFE PRICE PARSER ----------
+STATE_FILE = "state.json"
 
-def parse_price(value):
-    try:
-        return float(str(value).replace(",", "").replace("$",""))
-    except:
-        return 0.0
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 
-# ---------- GET PRODUCTS ----------
+# =============================
+# PUSHBULLET
+# =============================
 
-def get_products(site):
+def push(title, message):
 
     try:
 
-        url = site + "/products.json?limit=250"
+        requests.post(
+            "https://api.pushbullet.com/v2/pushes",
+            headers={"Access-Token": PUSH_TOKEN},
+            json={
+                "type": "note",
+                "title": title,
+                "body": message
+            }
+        )
 
-        r = requests.get(url, timeout=15)
-
-        data = r.json()
-
-        products = data.get("products", [])
-
-        return products
+        print("Push sent:", title)
 
     except Exception as e:
 
-        if not LOW_LOG_MODE:
-            print("Error:", site, e)
-
-        return []
+        print("Push error")
 
 
-# ---------- SCANNER ----------
+# =============================
+# LOAD / SAVE STATE
+# =============================
 
-def scan_site(site):
+def load_state():
 
-    products = get_products(site)
+    if os.path.exists(STATE_FILE):
 
-    print(f"Scanning {site}")
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+
+    return {}
+
+
+def save_state(state):
+
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
+
+
+# =============================
+# SCAN PRODUCTS
+# =============================
+
+def scan():
+
+    print("Scanning Outfitters...")
+
+    state = load_state()
+    new_state = {}
+
+    try:
+
+        r = requests.get(API, headers=HEADERS, timeout=20)
+        data = r.json()
+
+    except:
+
+        print("API error")
+        return
+
+    products = data.get("products", [])
 
     print("Products found:", len(products))
 
-    for p in products[:MAX_PRODUCTS]:
+    for product in products:
 
-        try:
+        title = product["title"]
+        handle = product["handle"]
+        link = SITE + "/products/" + handle
 
-            title = p["title"]
+        for variant in product["variants"]:
 
-            variant = p["variants"][0]
+            variant_id = str(variant["id"])
 
-            price = parse_price(variant["price"])
+            price = float(variant["price"])
+            compare = float(variant["compare_at_price"] or 0)
 
-            compare = parse_price(variant.get("compare_at_price"))
+            key = variant_id
 
-            discount = 0
+            new_state[key] = {
+                "title": title,
+                "price": price,
+                "compare": compare,
+                "link": link
+            }
 
-            if compare > 0:
+            if key not in state:
+                continue
 
-                discount = round((compare-price)/compare*100,1)
+            old_price = state[key]["price"]
+            old_compare = state[key]["compare"]
 
-            if discount > 40:
+            # ANY PRICE CHANGE (UP OR DOWN)
+            if price != old_price:
 
-                print("🔥 DEAL FOUND")
+                message = f"""
+{title}
 
-                print(title)
+Old Price: Rs {int(old_price)}
+New Price: Rs {int(price)}
 
-                print("Price:", price)
+{link}
+"""
 
-                print("Was:", compare)
-
-                print("Discount:", discount,"%")
-
-                print("------")
-
-        except:
-            pass
+                push("PRICE CHANGED", message)
 
 
-# ---------- MAIN LOOP ----------
+            # ANY DISCOUNT CHANGE
+            if compare != old_compare:
 
-def main():
+                if compare > 0:
 
-    total = 0
+                    discount = int((compare - price) / compare * 100)
 
-    for site in SHOPIFY_SITES:
+                    message = f"""
+{title}
 
-        scan_site(site)
+New Discount: {discount}%
 
-        total += 1
+Price: Rs {int(price)}
+Was: Rs {int(compare)}
 
-        time.sleep(DELAY)
+{link}
+"""
 
-    print("Scan Complete")
+                    push("DISCOUNT UPDATED", message)
 
-main()
+
+    save_state(new_state)
+
+    print("Scan complete.")
+
+
+# RUN ONCE (GitHub runs every 5 minutes)
+scan()
