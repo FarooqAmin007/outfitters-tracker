@@ -2,7 +2,7 @@ import requests
 import json
 import time
 
-PUSHBULLET_TOKEN = "YOUR_PUSHBULLET_TOKEN"
+PUSHBULLET_TOKEN = "o.LMvhCtQSfJMHLEXu1ghkK7NOxYpwHlyc"
 
 URL = "https://outfitters.com.pk/products.json?limit=250"
 
@@ -130,3 +130,4 @@ with open(STATE_FILE,"w") as f:
 print("Alerts sent:",alerts)
 
 print("Scan complete.")
+
