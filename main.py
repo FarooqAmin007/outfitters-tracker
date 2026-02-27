@@ -131,3 +131,4 @@ print("Alerts sent:",alerts)
 
 print("Scan complete.")
 
+send_push("TEST ALERT", "Quantum v7 Pushbullet working")
