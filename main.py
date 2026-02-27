@@ -10,29 +10,35 @@ print("===== GOD MODE AI HUNTER QUANTUM v7 STARTED =====")
 # PUSHBULLET SETTINGS
 ########################################
 
-PUSH_TOKEN = "o.lzUjCYd51OeBnWCqPHZYmDaiMkx38BwG"
+import requests
 
+PUSH_TOKEN = "o.lzUjCYd51OeBnWCqPHZYmDaiMkx38BwG"
 
 def send_push(title, message):
 
     try:
 
-        r = requests.post(
-            "https://api.pushbullet.com/v2/pushes",
-            headers={
-                "Access-Token": PUSH_TOKEN,
-                "Content-Type": "application/json"
-            },
-            json={
-                "type": "note",
-                "title": title,
-                "body": message
-            }
-        )
+        url = "https://api.pushbullet.com/v2/pushes"
 
-        print("Pushbullet:", r.status_code)
+        headers = {
+            "Access-Token": PUSH_TOKEN,
+            "Content-Type": "application/json",
+            "User-Agent": "QuantumTracker"
+        }
+
+        data = {
+            "type": "note",
+            "title": title,
+            "body": message
+        }
+
+        r = requests.post(url, headers=headers, json=data)
+
+        print("Push Status:", r.status_code)
+        print("Push Response:", r.text)
 
     except Exception as e:
+
         print("Push Error:", e)
 
 
@@ -159,4 +165,5 @@ except Exception as e:
 
 
 print("Scan complete.")
+
 
