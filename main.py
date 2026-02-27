@@ -1,106 +1,106 @@
 import requests
 import json
 
-print("===== GOD MODE AI HUNTER QUANTUM v8.1 STARTED =====")
-
-URL = "https://outfitters.com.pk/products.json?limit=250"
-
-NTFY_TOPIC = "outfitters-amin"
+print("===== GOD MODE AI HUNTER QUANTUM v8.2 TURBO STARTED =====")
 
 STATE_FILE = "state.json"
+NTFY_TOPIC = "outfitters-amin"
 
 
-# LOAD OLD DATA
+# LOAD MEMORY
 try:
-    with open(STATE_FILE, "r") as f:
-        old_prices = json.load(f)
+    with open(STATE_FILE,"r") as f:
+        old_prices=json.load(f)
 except:
-    old_prices = {}
+    old_prices={}
 
 
-# SEND ntfy PUSH
-def send_push(title, message):
+# PUSH NOTIFICATION
+def send_push(title,message):
 
     try:
 
         requests.post(
             f"https://ntfy.sh/{NTFY_TOPIC}",
             data=message.encode("utf-8"),
-            headers={
-                "Title": title.encode("ascii", "ignore").decode()
-            }
+            headers={"Title":title}
         )
 
         print("Push sent")
 
     except Exception as e:
 
-        print("Push Error:", e)
+        print("Push Error:",e)
 
 
-# GET PRODUCTS
+
+# GET PRODUCTS (DEDUPLICATED)
 def get_products():
 
-    products = []
+    products={}
 
-    page = 1
+    page=1
 
     while True:
 
-        r = requests.get(
-            f"https://outfitters.com.pk/products.json?limit=250&page={page}",
-            timeout=30
-        )
+        url=f"https://outfitters.com.pk/products.json?limit=250&page={page}"
 
-        data = r.json()
+        r=requests.get(url,timeout=20)
+
+        data=r.json()
 
         if not data["products"]:
             break
 
+
         for p in data["products"]:
 
-            title = p["title"]
+            title=p["title"]
+            handle=p["handle"]
 
-            handle = p["handle"]
+            url=f"https://outfitters.com.pk/products/{handle}"
 
-            for v in p["variants"]:
+            # get lowest variant price
+            prices=[float(v["price"]) for v in p["variants"]]
 
-                price = float(v["price"])
+            price=min(prices)
 
-                url = f"https://outfitters.com.pk/products/{handle}"
+            key=handle  # unique id
 
-                products.append({
-                    "title": title,
-                    "price": price,
-                    "url": url
-                })
+            products[key]={
 
-        page += 1
+                "title":title,
+                "price":price,
+                "url":url
+            }
+
+
+        page+=1
+
 
     return products
 
 
-print("Scanning Outfitters realtime...")
 
-products = get_products()
+print("Scanning Outfitters fast mode...")
 
-print("Products found:", len(products))
+products=get_products()
 
-
-new_prices = {}
-
-alerts = 0
+print("Real products found:",len(products))
 
 
-for p in products:
+new_prices={}
 
-    title = p["title"]
-    price = p["price"]
-    url = p["url"]
+alerts=0
 
-    key = title
 
-    new_prices[key] = price
+for key,p in products.items():
+
+    title=p["title"]
+    price=p["price"]
+    url=p["url"]
+
+    new_prices[key]=price
 
 
     # NEW PRODUCT
@@ -108,9 +108,7 @@ for p in products:
 
         send_push(
             "New Product",
-            f"""🆕 NEW PRODUCT
-
-{title}
+            f"""{title}
 
 Price: PKR {price}
 
@@ -118,47 +116,46 @@ Price: PKR {price}
 """
         )
 
-        print("NEW:", title)
+        print("NEW:",title)
 
-        alerts += 1
+        alerts+=1
 
 
     # PRICE CHANGE
     else:
 
-        old_price = old_prices[key]
+        old_price=old_prices[key]
 
-        if price != old_price:
+        if price!=old_price:
 
-            diff = price - old_price
-
-            percent = (diff / old_price) * 100
+            percent=((price-old_price)/old_price)*100
 
             send_push(
                 "Price Changed",
-                f"""💰 PRICE CHANGE
+                f"""{title}
 
-{title}
+Old: PKR {old_price}
+New: PKR {price}
 
-Old Price: PKR {old_price}
-New Price: PKR {price}
-
-Change: {round(percent,2)} %
+Change: {round(percent,2)}%
 
 {url}
 """
             )
 
-            print("PRICE CHANGE:", title)
+            print("PRICE CHANGE:",title)
 
-            alerts += 1
+            alerts+=1
+
 
 
 # SAVE MEMORY
-with open(STATE_FILE, "w") as f:
-    json.dump(new_prices, f)
+with open(STATE_FILE,"w") as f:
+
+    json.dump(new_prices,f)
 
 
-print("Alerts sent:", alerts)
+
+print("Alerts:",alerts)
 
 print("Scan complete.")
