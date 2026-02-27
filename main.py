@@ -1,19 +1,16 @@
 import requests
 import json
-import time
 
-print("===== GOD MODE AI HUNTER QUANTUM v8 STARTED =====")
+print("===== GOD MODE AI HUNTER QUANTUM v8.1 STARTED =====")
 
-# OUTFITTERS JSON API
 URL = "https://outfitters.com.pk/products.json?limit=250"
 
-# ntfy topic (YOU SUBSCRIBED THIS)
 NTFY_TOPIC = "outfitters-amin"
 
 STATE_FILE = "state.json"
 
 
-# LOAD OLD PRICES
+# LOAD OLD DATA
 try:
     with open(STATE_FILE, "r") as f:
         old_prices = json.load(f)
@@ -25,14 +22,19 @@ except:
 def send_push(title, message):
 
     try:
+
         requests.post(
             f"https://ntfy.sh/{NTFY_TOPIC}",
             data=message.encode("utf-8"),
-            headers={"Title": title}
+            headers={
+                "Title": title.encode("ascii", "ignore").decode()
+            }
         )
+
         print("Push sent")
 
     except Exception as e:
+
         print("Push Error:", e)
 
 
@@ -41,27 +43,39 @@ def get_products():
 
     products = []
 
-    r = requests.get(URL, timeout=30)
+    page = 1
 
-    data = r.json()
+    while True:
 
-    for p in data["products"]:
+        r = requests.get(
+            f"https://outfitters.com.pk/products.json?limit=250&page={page}",
+            timeout=30
+        )
 
-        title = p["title"]
+        data = r.json()
 
-        handle = p["handle"]
+        if not data["products"]:
+            break
 
-        for v in p["variants"]:
+        for p in data["products"]:
 
-            price = float(v["price"])
+            title = p["title"]
 
-            product_url = f"https://outfitters.com.pk/products/{handle}"
+            handle = p["handle"]
 
-            products.append({
-                "title": title,
-                "price": price,
-                "url": product_url
-            })
+            for v in p["variants"]:
+
+                price = float(v["price"])
+
+                url = f"https://outfitters.com.pk/products/{handle}"
+
+                products.append({
+                    "title": title,
+                    "price": price,
+                    "url": url
+                })
+
+        page += 1
 
     return products
 
@@ -88,17 +102,28 @@ for p in products:
 
     new_prices[key] = price
 
+
+    # NEW PRODUCT
     if key not in old_prices:
 
         send_push(
-            "🆕 New Product",
-            f"{title}\nPrice: PKR {price}\n{url}"
-        )
+            "New Product",
+            f"""🆕 NEW PRODUCT
 
-        alerts += 1
+{title}
+
+Price: PKR {price}
+
+{url}
+"""
+        )
 
         print("NEW:", title)
 
+        alerts += 1
+
+
+    # PRICE CHANGE
     else:
 
         old_price = old_prices[key]
@@ -110,16 +135,26 @@ for p in products:
             percent = (diff / old_price) * 100
 
             send_push(
-                "💰 Price Changed",
-                f"{title}\nOld: PKR {old_price}\nNew: PKR {price}\nChange: {round(percent,2)}%\n{url}"
-            )
+                "Price Changed",
+                f"""💰 PRICE CHANGE
 
-            alerts += 1
+{title}
+
+Old Price: PKR {old_price}
+New Price: PKR {price}
+
+Change: {round(percent,2)} %
+
+{url}
+"""
+            )
 
             print("PRICE CHANGE:", title)
 
+            alerts += 1
 
-# SAVE STATE
+
+# SAVE MEMORY
 with open(STATE_FILE, "w") as f:
     json.dump(new_prices, f)
 
