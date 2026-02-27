@@ -10,7 +10,7 @@ print("===== GOD MODE AI HUNTER QUANTUM v7 STARTED =====")
 # PUSHBULLET SETTINGS
 ########################################
 
-PUSH_TOKEN = "o.LMvhCtQSfJMHLEXu1ghkK7NOxYpwHlyc"
+PUSH_TOKEN = "o.lzUjCYd51OeBnWCqPHZYmDaiMkx38BwG"
 
 
 def send_push(title, message):
@@ -159,3 +159,4 @@ except Exception as e:
 
 
 print("Scan complete.")
+
