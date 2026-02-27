@@ -1,5 +1,8 @@
 name: GOD MODE AI HUNTER QUANTUM v7
 
+permissions:
+  contents: write
+
 on:
 
   schedule:
