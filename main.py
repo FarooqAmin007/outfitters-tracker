@@ -1,161 +1,151 @@
 import requests
 import json
+import time
 
-print("===== GOD MODE AI HUNTER QUANTUM v8.2 TURBO STARTED =====")
+print("===== GOD MODE AI HUNTER QUANTUM v9 HYPER ENGINE STARTED =====")
+
+# PUSH SERVICE
+PUSH_URL = "https://ntfy.sh/outfitters-amin"
+
+# SHOPIFY API
+BASE = "https://outfitters.com.pk/products.json?limit=250&page="
 
 STATE_FILE = "state.json"
-NTFY_TOPIC = "outfitters-amin"
-
 
 # LOAD MEMORY
 try:
-    with open(STATE_FILE,"r") as f:
-        old_prices=json.load(f)
+    with open(STATE_FILE, "r") as f:
+        old_state = json.load(f)
 except:
-    old_prices={}
+    old_state = {}
+
+new_state = {}
+
+alerts = 0
+page = 1
+total_products = 0
 
 
-# PUSH NOTIFICATION
-def send_push(title,message):
+# PUSH FUNCTION
+def send_push(title, msg):
 
     try:
 
         requests.post(
-            f"https://ntfy.sh/{NTFY_TOPIC}",
-            data=message.encode("utf-8"),
-            headers={"Title":title}
+            PUSH_URL,
+            data=f"{title}\n{msg}".encode("utf-8"),
+            timeout=10
         )
 
         print("Push sent")
 
     except Exception as e:
-
-        print("Push Error:",e)
-
+        print("Push error:", e)
 
 
-# GET PRODUCTS (DEDUPLICATED)
-def get_products():
+print("Scanning Outfitters HYPER mode...")
 
-    products={}
+while True:
 
-    page=1
+    try:
 
-    while True:
+        r = requests.get(BASE + str(page), timeout=20)
 
-        url=f"https://outfitters.com.pk/products.json?limit=250&page={page}"
+        data = r.json()
 
-        r=requests.get(url,timeout=20)
+        products = data["products"]
 
-        data=r.json()
-
-        if not data["products"]:
+        if not products:
             break
 
+        for p in products:
 
-        for p in data["products"]:
+            title = p["title"]
 
-            title=p["title"]
-            handle=p["handle"]
+            handle = p["handle"]
 
-            url=f"https://outfitters.com.pk/products/{handle}"
+            link = f"https://outfitters.com.pk/products/{handle}"
 
-            # get lowest variant price
-            prices=[float(v["price"]) for v in p["variants"]]
+            variant = p["variants"][0]
 
-            price=min(prices)
+            price = float(variant["price"])
 
-            key=handle  # unique id
+            compare = variant["compare_at_price"]
 
-            products[key]={
-
-                "title":title,
-                "price":price,
-                "url":url
-            }
+            if compare:
+                compare = float(compare)
+            else:
+                compare = price
 
 
-        page+=1
+            key = handle
+
+            new_state[key] = price
+
+            total_products += 1
 
 
-    return products
+            # NEW PRODUCT
+            if key not in old_state:
+
+                alerts += 1
+
+                send_push(
+                    "NEW PRODUCT",
+                    f"{title}\nPKR {price}\n{link}"
+                )
+
+                print("NEW:", title)
+
+            else:
+
+                old_price = old_state[key]
+
+                # PRICE CHANGE
+                if price != old_price:
+
+                    alerts += 1
+
+                    send_push(
+                        "PRICE CHANGE",
+                        f"{title}\nPKR {old_price} → PKR {price}\n{link}"
+                    )
+
+                    print("PRICE CHANGE:", title)
 
 
+        page += 1
 
-print("Scanning Outfitters fast mode...")
+        time.sleep(0.5)
 
-products=get_products()
+    except Exception as e:
 
-print("Real products found:",len(products))
+        print("Scan error:", e)
 
-
-new_prices={}
-
-alerts=0
+        break
 
 
-for key,p in products.items():
+# REMOVED PRODUCTS
+for key in old_state:
 
-    title=p["title"]
-    price=p["price"]
-    url=p["url"]
+    if key not in new_state:
 
-    new_prices[key]=price
-
-
-    # NEW PRODUCT
-    if key not in old_prices:
+        alerts += 1
 
         send_push(
-            "New Product",
-            f"""{title}
-
-Price: PKR {price}
-
-{url}
-"""
+            "REMOVED PRODUCT",
+            key
         )
 
-        print("NEW:",title)
-
-        alerts+=1
-
-
-    # PRICE CHANGE
-    else:
-
-        old_price=old_prices[key]
-
-        if price!=old_price:
-
-            percent=((price-old_price)/old_price)*100
-
-            send_push(
-                "Price Changed",
-                f"""{title}
-
-Old: PKR {old_price}
-New: PKR {price}
-
-Change: {round(percent,2)}%
-
-{url}
-"""
-            )
-
-            print("PRICE CHANGE:",title)
-
-            alerts+=1
-
+        print("REMOVED:", key)
 
 
 # SAVE MEMORY
-with open(STATE_FILE,"w") as f:
+with open(STATE_FILE, "w") as f:
 
-    json.dump(new_prices,f)
+    json.dump(new_state, f)
 
 
-
-print("Alerts:",alerts)
-
+print("Products scanned:", total_products)
+print("Alerts sent:", alerts)
 print("Scan complete.")
