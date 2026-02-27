@@ -1,16 +1,20 @@
-name: GOD MODE AI HUNTER QUANTUM v4
+name: GOD MODE AI HUNTER QUANTUM v7
 
 on:
+
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/2 * * * *'
 
   workflow_dispatch:
 
 jobs:
+
   run-bot:
+
     runs-on: ubuntu-latest
 
     steps:
+
     - name: Checkout
       uses: actions/checkout@v3
 
@@ -20,7 +24,7 @@ jobs:
         python-version: "3.11"
 
     - name: Install
-      run: pip install -r requirements.txt
+      run: pip install requests
 
     - name: Run Hunter
       run: python main.py
