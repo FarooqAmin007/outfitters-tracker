@@ -1,163 +1,132 @@
 import requests
 import json
-import os
+import time
 
-print("===== GOD MODE AI HUNTER QUANTUM v6 ULTRA STARTED =====")
+PUSHBULLET_TOKEN = "YOUR_PUSHBULLET_TOKEN"
 
-# =============================
-# SETTINGS
-# =============================
-
-SITE = "https://outfitters.com.pk"
-API = SITE + "/products.json?limit=250"
-
-PUSH_TOKEN = "o.LMvhCtQSfJMHLEXu1ghkK7NOxYpwHlyc"
+URL = "https://outfitters.com.pk/products.json?limit=250"
 
 STATE_FILE = "state.json"
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+
+print("===== GOD MODE AI HUNTER QUANTUM v7 STARTED =====")
 
 
-# =============================
-# PUSHBULLET
-# =============================
-
-def push(title, message):
-
-    try:
-
-        requests.post(
-            "https://api.pushbullet.com/v2/pushes",
-            headers={"Access-Token": PUSH_TOKEN},
-            json={
-                "type": "note",
-                "title": title,
-                "body": message
-            }
-        )
-
-        print("Push sent:", title)
-
-    except Exception as e:
-
-        print("Push error")
+# Load memory
+try:
+    with open(STATE_FILE,"r") as f:
+        state=json.load(f)
+except:
+    state={}
 
 
-# =============================
-# LOAD / SAVE STATE
-# =============================
+def push(title,msg):
 
-def load_state():
-
-    if os.path.exists(STATE_FILE):
-
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
-
-    return {}
-
-
-def save_state(state):
-
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f)
+    requests.post(
+        "https://api.pushbullet.com/v2/pushes",
+        headers={
+            "Access-Token":PUSHBULLET_TOKEN
+        },
+        json={
+            "type":"note",
+            "title":title,
+            "body":msg
+        }
+    )
 
 
-# =============================
-# SCAN PRODUCTS
-# =============================
-
-def scan():
-
-    print("Scanning Outfitters...")
-
-    state = load_state()
-    new_state = {}
+def price_clean(price):
 
     try:
-
-        r = requests.get(API, headers=HEADERS, timeout=20)
-        data = r.json()
-
+        return int(float(price))
     except:
+        return 0
 
-        print("API error")
-        return
 
-    products = data.get("products", [])
+print("Scanning Outfitters realtime...")
 
-    print("Products found:", len(products))
 
-    for product in products:
+r=requests.get(URL)
+data=r.json()
 
-        title = product["title"]
-        handle = product["handle"]
-        link = SITE + "/products/" + handle
+products=data["products"]
 
-        for variant in product["variants"]:
+print("Products found:",len(products))
 
-            variant_id = str(variant["id"])
 
-            price = float(variant["price"])
-            compare = float(variant["compare_at_price"] or 0)
+new_state={}
 
-            key = variant_id
+alerts=0
 
-            new_state[key] = {
-                "title": title,
-                "price": price,
-                "compare": compare,
-                "link": link
-            }
 
-            if key not in state:
-                continue
+for p in products:
 
-            old_price = state[key]["price"]
-            old_compare = state[key]["compare"]
+    title=p["title"]
 
-            # ANY PRICE CHANGE (UP OR DOWN)
-            if price != old_price:
+    variant=p["variants"][0]
 
-                message = f"""
+    price=price_clean(variant["price"])
+
+    compare=price_clean(variant["compare_at_price"])
+
+    key=str(p["id"])
+
+
+    new_state[key]={
+
+        "title":title,
+        "price":price,
+        "compare":compare
+
+    }
+
+
+    if key in state:
+
+        old_price=state[key]["price"]
+
+        if price!=old_price:
+
+            alerts+=1
+
+            msg=f"""
 {title}
 
-Old Price: Rs {int(old_price)}
-New Price: Rs {int(price)}
+Old Price: Rs {old_price}
+New Price: Rs {price}
 
-{link}
+https://outfitters.com.pk/products/{p['handle']}
 """
 
-                push("PRICE CHANGED", message)
+            print("PRICE CHANGE:",title)
+
+            push("PRICE CHANGE",msg)
 
 
-            # ANY DISCOUNT CHANGE
-            if compare != old_compare:
+    else:
 
-                if compare > 0:
+        alerts+=1
 
-                    discount = int((compare - price) / compare * 100)
+        msg=f"""
+NEW PRODUCT
 
-                    message = f"""
 {title}
 
-New Discount: {discount}%
+Price Rs {price}
 
-Price: Rs {int(price)}
-Was: Rs {int(compare)}
-
-{link}
+https://outfitters.com.pk/products/{p['handle']}
 """
 
-                    push("DISCOUNT UPDATED", message)
+        print("NEW:",title)
+
+        push("NEW PRODUCT",msg)
 
 
-    save_state(new_state)
+# Save memory
+with open(STATE_FILE,"w") as f:
+    json.dump(new_state,f)
 
-    print("Scan complete.")
 
+print("Alerts sent:",alerts)
 
-# RUN ONCE (GitHub runs every 5 minutes)
-scan()
+print("Scan complete.")
