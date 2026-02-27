@@ -1,134 +1,161 @@
 import requests
 import json
 import time
-
-PUSHBULLET_TOKEN = "o.LMvhCtQSfJMHLEXu1ghkK7NOxYpwHlyc"
-
-URL = "https://outfitters.com.pk/products.json?limit=250"
-
-STATE_FILE = "state.json"
-
+import os
 
 print("===== GOD MODE AI HUNTER QUANTUM v7 STARTED =====")
 
 
-# Load memory
-try:
-    with open(STATE_FILE,"r") as f:
-        state=json.load(f)
-except:
-    state={}
+########################################
+# PUSHBULLET SETTINGS
+########################################
+
+PUSH_TOKEN = "o.LMvhCtQSfJMHLEXu1ghkK7NOxYpwHlyc"
 
 
-def push(title,msg):
-
-    requests.post(
-        "https://api.pushbullet.com/v2/pushes",
-        headers={
-            "Access-Token":PUSHBULLET_TOKEN
-        },
-        json={
-            "type":"note",
-            "title":title,
-            "body":msg
-        }
-    )
-
-
-def price_clean(price):
+def send_push(title, message):
 
     try:
-        return int(float(price))
-    except:
-        return 0
+
+        r = requests.post(
+            "https://api.pushbullet.com/v2/pushes",
+            headers={
+                "Access-Token": PUSH_TOKEN,
+                "Content-Type": "application/json"
+            },
+            json={
+                "type": "note",
+                "title": title,
+                "body": message
+            }
+        )
+
+        print("Pushbullet:", r.status_code)
+
+    except Exception as e:
+        print("Push Error:", e)
+
+
+########################################
+# MEMORY SYSTEM
+########################################
+
+STATE_FILE = "state.json"
+
+
+def load_state():
+
+    if os.path.exists(STATE_FILE):
+
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+
+    return {}
+
+
+def save_state(data):
+
+    with open(STATE_FILE, "w") as f:
+        json.dump(data, f)
+
+
+memory = load_state()
+
+
+########################################
+# OUTFITTERS API
+########################################
+
+URL = "https://outfitters.com.pk/products.json?limit=250"
 
 
 print("Scanning Outfitters realtime...")
 
 
-r=requests.get(URL)
-data=r.json()
+try:
 
-products=data["products"]
+    r = requests.get(URL, timeout=20)
 
-print("Products found:",len(products))
+    data = r.json()
 
+    products = data["products"]
 
-new_state={}
-
-alerts=0
+    print("Products found:", len(products))
 
 
-for p in products:
-
-    title=p["title"]
-
-    variant=p["variants"][0]
-
-    price=price_clean(variant["price"])
-
-    compare=price_clean(variant["compare_at_price"])
-
-    key=str(p["id"])
+    alerts = 0
 
 
-    new_state[key]={
+    for product in products:
 
-        "title":title,
-        "price":price,
-        "compare":compare
+        name = product["title"]
 
-    }
+        handle = product["handle"]
 
-
-    if key in state:
-
-        old_price=state[key]["price"]
-
-        if price!=old_price:
-
-            alerts+=1
-
-            msg=f"""
-{title}
-
-Old Price: Rs {old_price}
-New Price: Rs {price}
-
-https://outfitters.com.pk/products/{p['handle']}
-"""
-
-            print("PRICE CHANGE:",title)
-
-            push("PRICE CHANGE",msg)
+        link = "https://outfitters.com.pk/products/" + handle
 
 
-    else:
+        variant = product["variants"][0]
 
-        alerts+=1
-
-        msg=f"""
-NEW PRODUCT
-
-{title}
-
-Price Rs {price}
-
-https://outfitters.com.pk/products/{p['handle']}
-"""
-
-        print("NEW:",title)
-
-        push("NEW PRODUCT",msg)
+        price = float(variant["price"])
 
 
-# Save memory
-with open(STATE_FILE,"w") as f:
-    json.dump(new_state,f)
+        key = name
 
 
-print("Alerts sent:",alerts)
+        #################################
+        # NEW PRODUCT
+        #################################
+
+        if key not in memory:
+
+            memory[key] = price
+
+            print("NEW:", name)
+
+            send_push(
+                "🆕 New Product",
+                f"{name}\nPrice: {price} PKR\n{link}"
+            )
+
+            alerts += 1
+
+
+        #################################
+        # PRICE CHANGE
+        #################################
+
+        else:
+
+            old_price = memory[key]
+
+            if price != old_price:
+
+                diff = price - old_price
+
+                percent = (diff / old_price) * 100
+
+                memory[key] = price
+
+                print("PRICE CHANGE:", name)
+
+                send_push(
+                    "💰 Price Changed",
+                    f"{name}\nOld: {old_price} PKR\nNew: {price} PKR\nChange: {percent:.1f}%\n{link}"
+                )
+
+                alerts += 1
+
+
+    print("Alerts sent:", alerts)
+
+
+    save_state(memory)
+
+
+except Exception as e:
+
+    print("ERROR:", e)
+
 
 print("Scan complete.")
-
-send_push("TEST ALERT", "Quantum v7 Pushbullet working")
