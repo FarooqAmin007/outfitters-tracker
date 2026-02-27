@@ -1,169 +1,129 @@
 import requests
 import json
 import time
-import os
 
-print("===== GOD MODE AI HUNTER QUANTUM v7 STARTED =====")
+print("===== GOD MODE AI HUNTER QUANTUM v8 STARTED =====")
 
+# OUTFITTERS JSON API
+URL = "https://outfitters.com.pk/products.json?limit=250"
 
-########################################
-# PUSHBULLET SETTINGS
-########################################
-
-import requests
-
-PUSH_TOKEN = "o.lzUjCYd51OeBnWCqPHZYmDaiMkx38BwG"
-
-def send_push(title, message):
-
-    try:
-
-        url = "https://api.pushbullet.com/v2/pushes"
-
-        headers = {
-            "Access-Token": PUSH_TOKEN,
-            "Content-Type": "application/json",
-            "User-Agent": "QuantumTracker"
-        }
-
-        data = {
-            "type": "note",
-            "title": title,
-            "body": message
-        }
-
-        r = requests.post(url, headers=headers, json=data)
-
-        print("Push Status:", r.status_code)
-        print("Push Response:", r.text)
-
-    except Exception as e:
-
-        print("Push Error:", e)
-
-
-########################################
-# MEMORY SYSTEM
-########################################
+# ntfy topic (YOU SUBSCRIBED THIS)
+NTFY_TOPIC = "outfitters-amin"
 
 STATE_FILE = "state.json"
 
 
-def load_state():
-
-    if os.path.exists(STATE_FILE):
-
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
-
-    return {}
+# LOAD OLD PRICES
+try:
+    with open(STATE_FILE, "r") as f:
+        old_prices = json.load(f)
+except:
+    old_prices = {}
 
 
-def save_state(data):
+# SEND ntfy PUSH
+def send_push(title, message):
 
-    with open(STATE_FILE, "w") as f:
-        json.dump(data, f)
+    try:
+        requests.post(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=message.encode("utf-8"),
+            headers={"Title": title}
+        )
+        print("Push sent")
+
+    except Exception as e:
+        print("Push Error:", e)
 
 
-memory = load_state()
+# GET PRODUCTS
+def get_products():
 
+    products = []
 
-########################################
-# OUTFITTERS API
-########################################
+    r = requests.get(URL, timeout=30)
 
-URL = "https://outfitters.com.pk/products.json?limit=250"
+    data = r.json()
+
+    for p in data["products"]:
+
+        title = p["title"]
+
+        handle = p["handle"]
+
+        for v in p["variants"]:
+
+            price = float(v["price"])
+
+            product_url = f"https://outfitters.com.pk/products/{handle}"
+
+            products.append({
+                "title": title,
+                "price": price,
+                "url": product_url
+            })
+
+    return products
 
 
 print("Scanning Outfitters realtime...")
 
+products = get_products()
 
-try:
-
-    r = requests.get(URL, timeout=20)
-
-    data = r.json()
-
-    products = data["products"]
-
-    print("Products found:", len(products))
+print("Products found:", len(products))
 
 
-    alerts = 0
+new_prices = {}
+
+alerts = 0
 
 
-    for product in products:
+for p in products:
 
-        name = product["title"]
+    title = p["title"]
+    price = p["price"]
+    url = p["url"]
 
-        handle = product["handle"]
+    key = title
 
-        link = "https://outfitters.com.pk/products/" + handle
+    new_prices[key] = price
 
+    if key not in old_prices:
 
-        variant = product["variants"][0]
+        send_push(
+            "🆕 New Product",
+            f"{title}\nPrice: PKR {price}\n{url}"
+        )
 
-        price = float(variant["price"])
+        alerts += 1
 
+        print("NEW:", title)
 
-        key = name
+    else:
 
+        old_price = old_prices[key]
 
-        #################################
-        # NEW PRODUCT
-        #################################
+        if price != old_price:
 
-        if key not in memory:
+            diff = price - old_price
 
-            memory[key] = price
-
-            print("NEW:", name)
+            percent = (diff / old_price) * 100
 
             send_push(
-                "🆕 New Product",
-                f"{name}\nPrice: {price} PKR\n{link}"
+                "💰 Price Changed",
+                f"{title}\nOld: PKR {old_price}\nNew: PKR {price}\nChange: {round(percent,2)}%\n{url}"
             )
 
             alerts += 1
 
-
-        #################################
-        # PRICE CHANGE
-        #################################
-
-        else:
-
-            old_price = memory[key]
-
-            if price != old_price:
-
-                diff = price - old_price
-
-                percent = (diff / old_price) * 100
-
-                memory[key] = price
-
-                print("PRICE CHANGE:", name)
-
-                send_push(
-                    "💰 Price Changed",
-                    f"{name}\nOld: {old_price} PKR\nNew: {price} PKR\nChange: {percent:.1f}%\n{link}"
-                )
-
-                alerts += 1
+            print("PRICE CHANGE:", title)
 
 
-    print("Alerts sent:", alerts)
+# SAVE STATE
+with open(STATE_FILE, "w") as f:
+    json.dump(new_prices, f)
 
 
-    save_state(memory)
-
-
-except Exception as e:
-
-    print("ERROR:", e)
-
+print("Alerts sent:", alerts)
 
 print("Scan complete.")
-
-
